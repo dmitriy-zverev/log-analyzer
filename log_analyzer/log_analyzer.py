@@ -8,8 +8,7 @@ config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
 
 
 def main():
-    with gzip.open('nginx-access-ui.log-20170630.gz', 'rt',
-                   encoding='utf-8') as f:
+    with gzip.open("nginx-access-ui.log-20170630.gz", "rt", encoding="utf-8") as f:
         content = f.read().split("\n")[:1]
         for c in content:
             print(c)
