@@ -1,3 +1,6 @@
 .venv/
 .ruff_cache/
 .pytest_cache/
+log/
+logs/
+**/log/

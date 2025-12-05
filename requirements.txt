@@ -16,5 +16,6 @@ pre-commit==4.5.0
 pyyaml==6.0.3
     # via pre-commit
 ruff==0.14.8
+structlog==25.5.0
 virtualenv==20.35.4
     # via pre-commit

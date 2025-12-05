@@ -2,9 +2,19 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 
-[manifest]
+[[package]]
+name = "log-analyzer"
+version = "0.1.0"
+source = { virtual = "." }
 
-[manifest.dependency-groups]
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.14.8" }]
 
 [[package]]
