@@ -1,95 +1,224 @@
-## Задание
-### Анализатор логов
+# Nginx Log Analyzer
 
-Жил-был чудный веб-интерфейса и все у него было хорошо: в него ходили пользователи, что-то там кликали, переходили по ссылкам, получали результат. Но со временем некоторые его странички стали тупить и долго грузиться. Менеджеры часто жалуются, мол "вот тут список долго грузился" или "интерфейсик тупит, поиск не работает". Но так трудно отделить те случаи, где проблемы на их стороне, а где действительно виноват веб-сервис. В логи reverse proxy перед интерфейсом (nginx) добавили время запроса (`$request_time` в `nginx` http://nginx.org/en/docs/http/ngx_http_log_module.html#log_format). Теперь можно распарсить логи и провести первичный анализ, выявив подозрительные URL'ы.
+A Python application for analyzing Nginx access logs and generating HTML reports with request statistics grouped by URL.
 
-Про логи:
+## Overview
 
-* семпл лога: `nginx-access-ui.log-20170630.gz`
-* шаблон названия логов `nginx-access-ui.log-YYYYMMDD.gz`
-* так вышло, что логи могут быть и plain (т.е. "сырые", без сжатия) и gzip
-* лог ротируется раз в день
-* опять же, так вышло, что логи интерфейса лежат в папке с логами других сервисов
+This tool processes Nginx log files in the `ui_short` format, extracts request information, calculates comprehensive statistics for each URL endpoint, and generates interactive HTML reports for performance analysis.
 
-Про отчет:
+## Features
 
-* count - сколько раз встречается URL, абсолютное значение
-* count_perc - сколько раз встречается URL, в процентнах относительно общего числа запросов
-* time_sum - суммарный \$request_time для данного URL'а, абсолютное значение
-* time_perc - суммарный \$request_time для данного URL'а, в процентах относительно общего $request_time всех запросов
-* time_avg - средний \$request_time для данного URL'а
-* time_max - максимальный \$request_time для данного URL'а
-* time_med - медиана \$request_time для данного URL'а
+### Implemented Functionality
 
+- **Multi-format Log Support**: Processes both plain text (`.log`) and gzip-compressed (`.gz`) log files
+- **Regex-based Parsing**: Extracts detailed information from each log line including:
+  - Remote address and user information
+  - Timestamp and request details (method, URL, HTTP version)
+  - Response status and body size
+  - Request time for performance analysis
+  - Various HTTP headers (referer, user agent, X-headers)
+  
+- **URL-based Aggregation**: Groups all requests by URL endpoint for consolidated analysis
 
-*Задание*: реализовать анализатор логов `log_analyzer.py`.
+- **Statistical Analysis**: Calculates comprehensive metrics for each URL:
+  - `count`: Total number of requests to the URL
+  - `count_perc`: Percentage of requests (relative to all requests)
+  - `time_sum`: Total time spent processing requests
+  - `time_perc`: Percentage of total processing time
+  - `time_avg`: Average request processing time
+  - `time_max`: Maximum request processing time
+  - `time_med`: Median request processing time
 
-__Основная функциональность__:
+- **Structured Logging**: Uses `structlog` for JSON-formatted structured logging with ISO timestamps
 
-1. Скрипт обрабатывает при запуске последний (со самой свежей датой в имени, не по mtime файла!) лог в `LOG_DIR`, в результате работы должен получится отчет как в `report-2017.06.30.html` (для корректной работы нужно будет найти и принести себе на диск `jquery.tablesorter.min.js`). То есть скрипт читает лог, парсит нужные поля, считает необходимую статистику по url'ам и рендерит шаблон `report.html` (в шаблоне нужно только подставить `$table_json`) в `report-YYYY.MM.DD.html`, где дата в названии соответствует дате обработанного файла логов . Ситуация, что логов на обработку нет возможна, это не должно являться ошибкой.
-2. Готовые отчеты лежат в `REPORT_DIR`. В отчет попадает `REPORT_SIZE` URL'ов с наибольшим суммарным временем обработки (`time_sum`).
-3. Скрипту должно быть возможно указать считать конфиг из другого файла, передав его путь через `--config`. У пути конфига должно быть дефолтное значение. Если файл не существует или не парсится, нужно выходить с ошибкой.
-4. В переменной `config` находится конфиг по умолчанию. В конфиге, считанном из файла, могут быть переопределены перменные дефолтного конфига (некоторые, все или никакие, т.е. файл может быть пустой) и они имеют более высокий приоритет по сравнению с дефолтным конфигом. Таким образом, результирующий конфиг получается слиянием конфига из файла и дефолтного, с приоритетом конфига из файла. Ситуацию, когда конфига на диске не оказалось, нужно исключить.
-5. Использовать конфиг как глобальную переменную запрещено, т.е. обращаться в своем функционале к нему так, как будто он глобальный - нельзя. Нужно передавать как аргумент.
-6. Использовать сторонние библиотеки для реализации основного функционала запрещено, за исключение `structlog`
-7. (задание со "звездочкой") Если скрипт удачно обработал, то работу не переделывает при повторном запуске.
+- **HTML Report Generation**: Creates interactive HTML reports with sortable tables for easy data exploration
 
-__Мониторинг__:
+- **Batch Processing**: Processes all log files matching the configured pattern in one run
 
-1. скрипт должен писать структурированные логи в JSON через [structlog](https://www.structlog.org/en/stable/why.html) (плюс, рекомендуется познакомиться с утилитой [jq](https://jqlang.github.io/jq/)). Допускается только использование уровней `debug`, `info`, `error`. Путь до логфайла указывается в конфиге, если не указан, лог должен писаться в stdout.
-2. все возможные "неожиданные" ошибки должны попадать в лог вместе с трейсбеком. Имеются в виду ошибки непредусмотренные логикой работы, приводящие к остановке обработки и выходу: баги, нажатие ctrl+C, кончилось место на диске и т.п.
-3. (задание со "звездочкой") должно быть предусмотрено оповещение о том, что большую часть анализируемого лога не удалось распарсить (например, потому что сменился формат логирования). Для этого нужно задаться относительным (в долях/процентах) порогом ошибок парсинга и при его превышании писать в лог, затем выходить.
+## Technical Stack
 
-__Тестирование__:
+- **Python**: 3.11+
+- **Dependencies**:
+  - `structlog` - Structured logging library
+  - `ruff` - Fast Python linter and formatter
+  - `pre-commit` - Git pre-commit hooks framework
+- **Package Management**: uv
+- **Linting & Formatting**: Ruff with 120 character line length
 
-на скрипт должны быть написаны тесты с использованием библиотеки `pytest`. Тестируемые кейсы и структура тестов определяется самостоятельно (без фанатизма, достаточно каких-нибудь разумных тестов, занятия про тестирование ждут нас впереди).
+## Configuration
 
-__Оформление__:
+The application uses a configuration dictionary with the following parameters:
 
-1. задать проекту типовую структуру (можно ориентироваться https://realpython.com/python-application-layouts/ или свои любимые крупные проекты на github)
-2. настроить pre-commit хуки, как минимум линтер, black, isort, mypy и poetry
-3. настроить CI со стандартными проверками: линтер, black, isort, mypy, - и запуском тестов.
-4. написать README.md с его кратким описанием и примерами запуска
-5. настройку и управление зависимостями провести через poetry и pyproject.toml (ну и возможно setup.cfg)
-6. подготовить Makefile для удобного запуска линтовки, тестов (и тестового покрытия) и самого приложения
-7. (задание со "звездочкой") подготовить Dockerfile, собранный образ должен уметь по подключенным через volume входным данным (директория с логами, конфиг) выдавать в этот же или другой volume отчет
+```python
+config = {
+    "REPORT_SIZE": 1000,              # Maximum number of URLs in report
+    "REPORT_DIR": "../reports",        # Directory for output reports
+    "LOG_DIR": "../log",               # Directory containing log files
+    "LOG_FILE_NAME": "nginx-access-ui", # Log file name prefix
+    "TIME_FORMAT": "%d/%b/%Y:%H:%M:%S %z",  # Timestamp parsing format
+    "REPORT_REPLACE_STRING": "$table_json",  # Placeholder in HTML template
+}
+```
 
+## Expected Log Format
 
-*Цель задания*: получить (прокачать) навык создания поноценного проекта. То есть проекта, наполненнго адекватным кодом, который удобно расширять и поддерживать, протестированного, пригодного для мониторинга, имеющего стандартную структуру, минимальное описание и настроенный CI. Совпадение всех чисел с приведенным примером отчета целью не является (лишь бы похожи были =)
+The analyzer expects Nginx logs in the following format:
 
-*Критерии успеха*: задание __обязательно__, кроме частей со "звездочкой", котороые являются расширением основного фуонкционала и выполняются по возможности. Критерием успеха является работающий и оформленный согласно заданию код. Далее успешность определяется code review.
+```
+log_format ui_short '$remote_addr  $remote_user $http_x_real_ip [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
+                    '$request_time';
+```
 
-__Распространенные проблемы__:
+## Usage
 
-* не стоит делать свои кастомные классы ошибок, это иногда (!) имеет смысл для библиотек, но не для задач подобного рода.
-* ограничьтесь уровнями логирования DEBUG, INFO и ERROR: https://dave.cheney.net/2015/11/05/lets-talk-about-logging
-* не выходите через sys.exit не из main. Это затрудняет тестирование и переиспользование кода.
-* чтобы отрендерить шаблон не надо итерироваться по всем его строкам и искать место замены, можно воспользоваться, например, https://docs.python.org/3/library/string.html#string.Template.safe_substitute.
-* функцию, которая будет парсить лог желательно сделать генератором и передать в качестве аргумента функции создателю отчета.
-* не забывайте про кодировки, когда читаете лог и пишите отчет.
-* из функции, которая будет искать последний лог удобно возвращать namedtuple/dataclass с указанием пути до него, распаршенной через datetime даты из имени файла и расширением, например.
-* распаршенная дата из имени логфайла пригодится, чтобы составить путь до отчета, это можно сделать "за один присест", не нужно проходится по всем файлам и что-то искать.
-* протестируйте функцию поиска лога, она не должна возвращать .bz2 файлы и т.п. Этого можно добиться правильной регуляркой.
-* найти самый свежий лог можно за один проход по файлам, без использования glob, сортировки и т.п.
-* нужный открыватель лога (open/gzip.open) перед парсингом можно выбрать через тернарный оператор.
-* проверка на превышение процента ошибок при парсинге выполняетя один раз, в конце чтения файла, а не на каждую строчку/ошибку.
-* коммитить толстые бинари (например nginx-access-ui.log-20170630.gz) в git не стоит, он для исходного кода, в основном
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-__Полезные ссылки__:
+2. Place your Nginx log files in the configured `LOG_DIR` directory
 
-* https://docs.python.org/3/library/statistics.html
-* https://jesseduffield.com/Beginners-Guide-To-Abstraction/
-* https://melevir.medium.com/короче-говоря-принцип-единой-ответсвенности-92840ac55baa
-* https://melevir.medium.com/python-стиль-кода-1af07092836e
-* https://melevir.medium.com/дизайн-функций-a63bc9588e11
-* https://www.youtube.com/watch?v=o9pEzgHorH0 Stop Writing Classes
-* https://leontrolski.github.io/mostly-pointless.html
-* https://blog.guilatrova.dev/handling-exceptions-in-python-like-a-pro/
-* https://mitelman.engineering/blog/python-best-practice/automating-python-best-practices-for-a-new-project/
-* https://medium.com/@vanflymen/blazing-fast-ci-with-github-actions-poetry-black-and-pytest-9e74299dd4a5
+3. Run the analyzer:
+```bash
+cd homework/log_analyzer
+python log_analyzer.py
+```
 
-## Deadline
-Задание желательно сдать в течение недели. Код, отправленный на ревью в это время, рассматривается в первом приоритете. Нарушение делайна не карается. Пытаться сдать ДЗ можно до конца курсы. Код, отправленный с опозданием, когда по плану предполагается работа над более актуальным ДЗ, будет рассматриваться в более низком приоритете без гарантий по высокой скорости проверки.
+4. Find generated reports in the `REPORT_DIR` directory with filenames like `report-YYYYMMDD.html`
 
-## Обратная связь
-Cтудент коммитит все необходимое в свой github/gitlab репозитарий. Далее необходимо зайти в ЛК, найти занятие, ДЗ по которому выполнялось, нажать “Чат с преподавателем” и отправить ссылку. После этого ревью и общение на тему ДЗ будет происходить в рамках этого чата.
+## Project Structure
+
+```
+homework/
+├── log_analyzer/
+│   ├── __init__.py
+│   └── log_analyzer.py       # Main analyzer logic
+├── log/                       # Input log files directory
+├── reports/                   # Generated HTML reports
+│   ├── report.html           # HTML template
+│   ├── jquery.tablesorter.min.js  # Table sorting JavaScript
+│   └── report-*.html         # Generated reports
+├── tests/
+│   └── tests.py              # Test suite (placeholder)
+├── docs/
+│   └── homework.pdf          # Assignment description
+├── pyproject.toml            # Project configuration
+├── requirements.txt          # Python dependencies
+├── .pre-commit-config.yaml   # Pre-commit hooks
+├── makefile                  # Build automation
+└── README.md                 # This file
+```
+
+## Development
+
+### Code Quality Tools
+
+- **Ruff**: Configured for linting and formatting
+- **Pre-commit**: Automated code quality checks before commits
+
+### Run Linting
+
+```bash
+make lint
+# or
+ruff check .
+```
+
+### Format Code
+
+```bash
+ruff format .
+```
+
+## Areas for Improvement
+
+### Critical
+
+1. **Error Handling**: 
+   - Add try-catch blocks for file operations
+   - Handle malformed log lines gracefully
+   - Validate parsed data before processing
+   - Check for missing or corrupted files
+
+2. **Testing**:
+   - Implement unit tests for parsing logic
+   - Add integration tests for full workflow
+   - Test edge cases (empty files, malformed data, etc.)
+   - Add test coverage reporting
+
+3. **Bug Fixes**:
+   - Fix `time_max` calculation (currently uses minimum from sorted list instead of maximum)
+   - Validate date parsing from filename
+   - Check if report already exists before overwriting
+
+### High Priority
+
+4. **Configuration Management**:
+   - Support external configuration files (YAML/JSON)
+   - Add command-line argument parsing (argparse)
+   - Support environment variables for deployment flexibility
+   - Validate configuration values
+
+5. **Code Quality**:
+   - Add type hints for better IDE support and error prevention
+   - Add comprehensive docstrings for functions and modules
+   - Remove global variable `all_logs` (use return values or class-based approach)
+   - Split large `main()` function into smaller testable units
+
+6. **Logging Improvements**:
+   - Log parsing errors with problematic line content
+   - Add progress indicators for large file processing
+   - Separate error logs from info logs
+   - Add log levels configuration
+
+### Medium Priority
+
+7. **Performance Optimization**:
+   - Stream processing for large files (don't load all into memory)
+   - Parallel processing of multiple log files
+   - Add progress bars for long-running operations
+   - Optimize regex compilation (compile once, reuse)
+
+8. **Feature Enhancements**:
+   - Support for additional Nginx log formats
+   - Configurable report size limits
+   - Export to multiple formats (JSON, CSV, etc.)
+   - Date range filtering
+   - Status code analysis
+   - Response size analysis
+
+9. **Reporting**:
+   - Add charts/visualizations (e.g., using Chart.js)
+   - Summary statistics in report header
+   - Timestamp your reports with generation time
+   - Support for custom report templates
+
+### Low Priority
+
+10. **User Experience**:
+    - Better CLI interface with help messages
+    - Verbose/debug mode options
+    - Dry-run mode to preview operations
+    - Summary output to console
+
+11. **CI/CD**:
+    - GitHub Actions workflow
+    - Automated testing on push
+    - Code coverage enforcement
+    - Docker containerization
+
+12. **Documentation**:
+    - API documentation (Sphinx)
+    - Example log files for testing
+    - Troubleshooting guide
+    - Performance benchmarks
+
+## License
+
+This project is part of an educational assignment.
+
+## Author
+
+OTUS Python Pro Course - Homework Assignment
